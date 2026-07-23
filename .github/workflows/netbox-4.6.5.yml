@@ -1,0 +1,132 @@
+name: NetBox 4.6.5 compatibility
+
+on:
+  push:
+    branches:
+      - test/netbox-4.6.5
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: netbox
+          POSTGRES_USER: netbox
+          POSTGRES_PASSWORD: netbox
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U netbox -d netbox"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NETBOX_SOURCE: ${{ runner.temp }}/netbox-v4.6.5
+      PYTHONPATH: ${{ runner.temp }}/netbox-v4.6.5/netbox
+      DJANGO_SETTINGS_MODULE: netbox.settings
+
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check out NetBox Community v4.6.5
+        run: |
+          git clone --depth 1 --branch v4.6.5 \
+            https://github.com/netbox-community/netbox.git \
+            "$NETBOX_SOURCE"
+
+      - name: Install NetBox dependencies and plugin
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r "$NETBOX_SOURCE/requirements.txt"
+          python -m pip install -e .
+
+      - name: Configure NetBox
+        run: |
+          cat > "$NETBOX_SOURCE/netbox/netbox/configuration.py" <<'PY'
+          ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver']
+          SECRET_KEY = 'netbox-geofeed-ci-secret-key-which-is-longer-than-fifty-characters-12345'
+          API_TOKEN_PEPPERS = {
+              1: 'netbox-geofeed-ci-api-token-pepper-longer-than-fifty-characters-12345',
+          }
+          DATABASES = {
+              'default': {
+                  'ENGINE': 'django.db.backends.postgresql',
+                  'NAME': 'netbox',
+                  'USER': 'netbox',
+                  'PASSWORD': 'netbox',
+                  'HOST': '127.0.0.1',
+                  'PORT': 5432,
+                  'CONN_MAX_AGE': 0,
+              }
+          }
+          REDIS = {
+              'tasks': {
+                  'HOST': '127.0.0.1',
+                  'PORT': 6379,
+                  'USERNAME': '',
+                  'PASSWORD': '',
+                  'DATABASE': 0,
+                  'SSL': False,
+              },
+              'caching': {
+                  'HOST': '127.0.0.1',
+                  'PORT': 6379,
+                  'USERNAME': '',
+                  'PASSWORD': '',
+                  'DATABASE': 1,
+                  'SSL': False,
+              },
+          }
+          PLUGINS = ['netbox_geofeed']
+          PLUGINS_CONFIG = {}
+          LOGIN_REQUIRED = False
+          RELEASE_CHECK_URL = None
+          CENSUS_REPORTING_ENABLED = False
+          PY
+
+      - name: Verify NetBox version and plugin loading
+        run: |
+          cd "$NETBOX_SOURCE/netbox"
+          python manage.py shell -c "from django.conf import settings; print(settings.VERSION); assert settings.VERSION == '4.6.5'"
+
+      - name: Generate plugin migration
+        run: |
+          cd "$NETBOX_SOURCE/netbox"
+          python manage.py makemigrations netbox_geofeed --noinput --verbosity 2
+
+      - name: Apply database migrations
+        run: |
+          cd "$NETBOX_SOURCE/netbox"
+          python manage.py migrate --noinput
+
+      - name: Run Django system checks
+        run: |
+          cd "$NETBOX_SOURCE/netbox"
+          python manage.py check
+
+      - name: Run compatibility smoke test
+        run: python tests/smoke_netbox_4_6_5.py
