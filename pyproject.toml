@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netbox-geofeed"
+version = "1.0.0"
+description = "RFC 8805 geofeed publishing plugin for NetBox"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["netbox_geofeed*"]

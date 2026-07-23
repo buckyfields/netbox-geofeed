@@ -1,0 +1,41 @@
+<div class="card">
+  <h5 class="card-header">
+    Geofeed
+    {% if geofeed %}
+      <div class="card-actions">
+        <a href="{{ geofeed.get_absolute_url }}" class="btn btn-ghost-secondary btn-sm">View</a>
+      </div>
+    {% endif %}
+  </h5>
+  <div class="card-body">
+    {% if geofeed %}
+      <table class="table table-hover attr-table mb-0">
+        <tr>
+          <th scope="row">Country</th>
+          <td>{{ geofeed.country }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Region</th>
+          <td>{{ geofeed.region|default:"—" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">City</th>
+          <td>{{ geofeed.city|default:"—" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Postal Code</th>
+          <td>{{ geofeed.postal_code|default:"—" }}</td>
+        </tr>
+      </table>
+    {% else %}
+      <div class="text-muted">No geofeed entry defined for this object.</div>
+    {% endif %}
+  </div>
+  {% if not geofeed %}
+    <div class="card-footer text-end">
+      <a href="{% url 'plugins:netbox_geofeed:geofeed_add' %}" class="btn btn-primary btn-sm">
+        <i class="mdi mdi-plus-thick"></i> Add Geofeed
+      </a>
+    </div>
+  {% endif %}
+</div>
