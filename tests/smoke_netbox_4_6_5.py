@@ -13,8 +13,10 @@ from django.contrib.auth import get_user_model
 from django.test import Client
 from django.urls import reverse
 from ipam.models import IPRange, Prefix
+from netbox.registry import registry
 
 from netbox_geofeed.models import Geofeed
+from netbox_geofeed.template_content import IPRangeGeofeedPanel, PrefixGeofeedPanel
 
 
 def assert_status(client, url, expected=200):
@@ -26,8 +28,34 @@ def assert_status(client, url, expected=200):
     return response
 
 
+def assert_template_extension_scope():
+    """Ensure geofeed panels are registered only for their intended IPAM models."""
+    extensions = registry["plugins"]["template_extensions"]
+    global_extensions = extensions.get(None, [])
+    prefix_extensions = extensions.get("ipam.prefix", [])
+    ip_range_extensions = extensions.get("ipam.iprange", [])
+
+    assert PrefixGeofeedPanel in prefix_extensions, (
+        "PrefixGeofeedPanel is not registered for ipam.prefix. "
+        "NetBox 4.6.5 expects PluginTemplateExtension.models (plural) to be a list."
+    )
+    assert IPRangeGeofeedPanel in ip_range_extensions, (
+        "IPRangeGeofeedPanel is not registered for ipam.iprange. "
+        "NetBox 4.6.5 expects PluginTemplateExtension.models (plural) to be a list."
+    )
+    assert PrefixGeofeedPanel not in global_extensions, (
+        "PrefixGeofeedPanel was registered globally instead of only for ipam.prefix."
+    )
+    assert IPRangeGeofeedPanel not in global_extensions, (
+        "IPRangeGeofeedPanel was registered globally instead of only for ipam.iprange."
+    )
+
+
 def main():
     results = {}
+
+    assert_template_extension_scope()
+    results["template_extension_registration"] = "passed"
 
     prefix = Prefix(prefix="192.0.2.0/24", description="Geofeed compatibility test")
     prefix.full_clean()
